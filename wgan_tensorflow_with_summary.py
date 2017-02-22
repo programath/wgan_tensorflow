@@ -99,30 +99,35 @@ class Weissian_GAN:
 
             with tf.variable_scope('Discriminator', reuse = True):
                 with tf.variable_scope('layer1'):
-                    D_W1 = tf.get_variable("weights", initializer=xavier_init([X_dim, h_dim]))
+                    D_W1 = tf.get_variable("weights")
                     variable_summaries(D_W1)
-                    D_b1 = tf.get_variable("biases", [h_dim], initializer=tf.constant_initializer(0.0))
+                    D_b1 = tf.get_variable("biases")
                     variable_summaries(D_b1)
                     DG_h1 = tf.nn.relu(tf.matmul(G_prob, D_W1) + D_b1)
 
                 with tf.variable_scope('layer2'):
-                    D_W2 = tf.get_variable("weights", initializer=xavier_init([h_dim, 1]))
+                    D_W2 = tf.get_variable("weights")
                     variable_summaries(D_W2)
-                    D_b2 = tf.get_variable("biases", [1], initializer=tf.constant_initializer(0.0))
+                    D_b2 = tf.get_variable("biases")
                     variable_summaries(D_b2)
                     D_fake = tf.matmul(DG_h1, D_W2) + D_b2
 
             with tf.name_scope('Loss'):
                 with tf.name_scope('D_loss'):
                     self.D_loss = tf.reduce_mean(D_real) - tf.reduce_mean(D_fake)
+                    
                 with tf.name_scope('G_loss'):
                     self.G_loss = -tf.reduce_mean(D_fake)
+                    tf.summary.scalar("D_loss", self.G_loss)
 
             with tf.name_scope('optimizer'):
                 self.D_solver = (tf.train.RMSPropOptimizer(learning_rate=1e-4)
                         .minimize(-self.D_loss, var_list=self.theta_D))
                 self.G_solver = (tf.train.RMSPropOptimizer(learning_rate=1e-4)
                         .minimize(self.G_loss, var_list=self.theta_G)) 
+
+            self.D_summaries = tf.summary.merge([tf.summary.scalar("D_loss", self.D_loss)])
+            self.G_summaries = tf.summary.merge([tf.summary.scalar("G_loss", self.G_loss)])
 
     def run_graph(self):
         def sample_z(m, n):
@@ -131,20 +136,22 @@ class Weissian_GAN:
         with self.sess as sess:
             sess.run(tf.global_variables_initializer())
             i = 0
-            for it in range(2000):
-                for _ in range(5):
+            for it in range(2000000):
+                for ech in range(5):
+
                     X_mb, _ = mnist.train.next_batch(mb_size)
 
-                    _, D_loss_curr, _ = sess.run(
-                        [self.D_solver, self.D_loss, self.clip_D],
+                    D_merge, _, D_loss_curr, _ = sess.run(
+                        [self.D_summaries, self.D_solver, self.D_loss, self.clip_D],
                         feed_dict={self.X: X_mb, self.z: sample_z(mb_size, z_dim)}
                     )
-                    #summary_writer.add_summary(summary, _)
+                    self.writer.add_summary(D_merge, ech+it*5)
 
-                _, G_loss_curr = sess.run(
-                    [self.G_solver, self.G_loss],
+                G_merge, _, G_loss_curr = sess.run(
+                    [self.G_summaries, self.G_solver, self.G_loss],
                     feed_dict={self.z: sample_z(mb_size, z_dim)}
                 )
+                self.writer.add_summary(G_merge, it)
                 
                 if it % 100 == 0:
                     print('Iter: {}; D loss: {:.4}; G_loss: {:.4}'
