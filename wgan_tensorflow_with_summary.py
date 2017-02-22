@@ -62,62 +62,55 @@ class Weissian_GAN:
                 self.X = tf.placeholder(tf.float32, shape=[None, X_dim], name = 'input_data')
                 self.z = tf.placeholder(tf.float32, shape=[None, z_dim], name = 'random_noise')
 
-            with tf.name_scope('Discriminator'):
-                with tf.name_scope('layer1'):
-                    self.D_W1 = tf.Variable(xavier_init([X_dim, h_dim]), name = 'weights')
+            with tf.variable_scope('Discriminator'):
+                with tf.variable_scope('layer1'):
+                    self.D_W1 = tf.get_variable("weights", initializer=xavier_init([X_dim, h_dim]))
                     variable_summaries(self.D_W1)
-                    self.D_b1 = tf.Variable(tf.zeros(shape=[h_dim]), name = 'biases')
+                    self.D_b1 = tf.get_variable("biases", [h_dim], initializer=tf.constant_initializer(0.0))
                     variable_summaries(self.D_b1)
-
-                with tf.name_scope('layer2'):
-                    self.D_W2 = tf.Variable(xavier_init([h_dim, 1]), name = 'weights')
+                    D_h1 = tf.nn.relu(tf.matmul(self.X, self.D_W1) + self.D_b1)
+                    tf.summary.histogram('hidden1', D_h1)
+                with tf.variable_scope('layer2'):
+                    self.D_W2 = tf.get_variable("weights", initializer=xavier_init([h_dim, 1]))
                     variable_summaries(self.D_W2)
-                    self.D_b2 = tf.Variable(tf.zeros(shape=[1]), name = 'biases')
-                    variable_summaries(self.D_b2)         
+                    self.D_b2 = tf.get_variable("biases", [1], initializer=tf.constant_initializer(0.0))
+                    variable_summaries(self.D_b2)
+                    D_real = tf.matmul(D_h1, self.D_W2) + self.D_b2
+                    tf.summary.histogram('D_real', D_real)
+
                 self.theta_D = [self.D_W1, self.D_W2, self.D_b1, self.D_b2]
                 self.clip_D = [p.assign(tf.clip_by_value(p, -0.01, 0.01)) for p in self.theta_D]
-                    
 
-
-            with tf.name_scope('Generator'):
-                with tf.name_scope('layer1'):
-                    self.G_W1 = tf.Variable(xavier_init([z_dim, h_dim]), name = 'weights')
+            with tf.variable_scope('Generator'):
+                with tf.variable_scope('layer1'):
+                    self.G_W1 = tf.get_variable("weights", initializer=xavier_init([z_dim, h_dim]))
                     variable_summaries(self.G_W1)
-                    self.G_b1 = tf.Variable(tf.zeros(shape=[h_dim]), name = 'biases')
+                    self.G_b1 = tf.get_variable("biases", [h_dim], initializer=tf.constant_initializer(0.0))
                     variable_summaries(self.G_b1)
-                with tf.name_scope('layer2'):
-                    self.G_W2 = tf.Variable(xavier_init([h_dim, X_dim]), name = 'weights')
+                    G_h1 = tf.nn.relu(tf.matmul(self.z, self.G_W1) + self.G_b1)
+                with tf.variable_scope('layer2'):
+                    self.G_W2 = tf.get_variable("weights", initializer=xavier_init([h_dim, X_dim]))
                     variable_summaries(self.G_W2)
-                    self.G_b2 = tf.Variable(tf.zeros(shape=[X_dim]), name = 'biases')
-                    variable_summaries(self.G_b2)
+                    self.G_b2 = tf.get_variable("biases", [X_dim], initializer=tf.constant_initializer(0.0))
+                    variable_summaries(self.G_b2) 
+                    G_log_prob = tf.matmul(G_h1, self.G_W2) + self.G_b2
+                    G_prob = tf.nn.sigmoid(G_log_prob)               
                 self.theta_G = [self.G_W1, self.G_W2, self.G_b1, self.G_b2]
 
-            def model_graph(x,z):
-                with tf.name_scope('Discriminator'):
-                    with tf.name_scope('layer1'):
-                        D_h1 = tf.nn.relu(tf.matmul(x, self.D_W1) + self.D_b1)
-                        tf.summary.histogram('hidden1', D_h1)
-                    with tf.name_scope('layer2'):
-                        D_real = tf.matmul(D_h1, self.D_W2) + self.D_b2
-                        tf.summary.histogram('D_real', D_real)
+            with tf.variable_scope('Discriminator', reuse = True):
+                with tf.variable_scope('layer1'):
+                    D_W1 = tf.get_variable("weights", initializer=xavier_init([X_dim, h_dim]))
+                    variable_summaries(D_W1)
+                    D_b1 = tf.get_variable("biases", [h_dim], initializer=tf.constant_initializer(0.0))
+                    variable_summaries(D_b1)
+                    DG_h1 = tf.nn.relu(tf.matmul(G_prob, D_W1) + D_b1)
 
-                with tf.name_scope('Generator'):
-                    with tf.name_scope('layer1'):
-                        G_h1 = tf.nn.relu(tf.matmul(z, self.G_W1) + self.G_b1)
-                    with tf.name_scope('layer2'):
-                        G_log_prob = tf.matmul(G_h1, self.G_W2) + self.G_b2
-                        G_prob = tf.nn.sigmoid(G_log_prob)
-
-                with tf.name_scope('Discriminator'):
-                    with tf.name_scope('layer1'):
-                        D_h1 = tf.nn.relu(tf.matmul(G_prob, self.D_W1) + self.D_b1)
-                        tf.summary.histogram('hidden1', D_h1)
-                    with tf.name_scope('layer2'):
-                        D_fake = tf.matmul(D_h1, self.D_W2) + self.D_b2
-                        tf.summary.histogram('D_fake', D_fake)
-                return D_real, D_fake
-
-            D_real, D_fake = model_graph(self.X,self.z)
+                with tf.variable_scope('layer2'):
+                    D_W2 = tf.get_variable("weights", initializer=xavier_init([h_dim, 1]))
+                    variable_summaries(D_W2)
+                    D_b2 = tf.get_variable("biases", [1], initializer=tf.constant_initializer(0.0))
+                    variable_summaries(D_b2)
+                    D_fake = tf.matmul(DG_h1, D_W2) + D_b2
 
             with tf.name_scope('Loss'):
                 with tf.name_scope('D_loss'):
