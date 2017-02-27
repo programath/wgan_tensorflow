@@ -1,4 +1,4 @@
 /out/*
 /MNIST_data/*
 .DS_Store
-
+/sources/*
